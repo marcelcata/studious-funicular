@@ -93,6 +93,8 @@ class colors:
 TRAIN='wcmudict.train.dict'
 TEST='wcmudict.test.dict'
 
+#canvi de prova
+
 # Try replacing GRU, or SimpleRNN
 RNN = recurrent.LSTM
 VSIZE = 7
