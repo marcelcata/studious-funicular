@@ -113,7 +113,7 @@ def calcPerformance(iteration):
     cmdTasas = "./tasas " + namefile + " -F -f " + sqote + "|" + sqote + " -s " + dqote + " " + dqote + " -pra"
 
     output = subprocess.Popen([cmdTasas], shell=True, stdout=subprocess.PIPE).communicate()[0]
-    #subprocess.Popen(["rm " + namefile], shell=True, stdout=subprocess.PIPE).communicate()[0]
+    subprocess.Popen(["rm " + namefile], shell=True, stdout=subprocess.PIPE).communicate()[0]
     output = output.splitlines()[1]
     output = output.split()
 
@@ -147,14 +147,14 @@ TEST='wcmudict.test.dict'
 
 # Try replacing GRU, or SimpleRNN
 RNN = recurrent.LSTM
-VSIZE = 7 # Embedded vector size
-HIDDEN_SIZE = 128  # Size of hidden layer after first RNN
+VSIZE = 7   # Embedded vector size
+HIDDEN_SIZE = 128   # Size of hidden layer after first RNN
 BATCH_SIZE = 128
-LAYERS = 1 # Layers of the second RNN
-INVERT = True # Invert the word
+LAYERS = 1  # Layers of the second RNN
+INVERT = True   # Invert the word
 
-DB_SPLIT = 0.1 # Split the database (in % of database split, all database = 1)
-N_ITER = 1 # Number of epochs
+DB_SPLIT = 0.1  # Split the database (in % of database split, all database = 1)
+N_ITER = 5  # Number of epochs
 
 train = Dictionary(TRAIN)
 test = Dictionary(TEST)
@@ -261,7 +261,7 @@ model.compile(loss='sparse_categorical_crossentropy',
 measurements = np.zeros((N_ITER, 4))
 
 # Train the model each generation and show predictions against the validation dataset
-for iteration in range(1,N_ITER+1):
+for iteration in range(0,N_ITER):
     print()
     print('-' * 50)
     print('Iteration', iteration)
@@ -275,7 +275,7 @@ for iteration in range(1,N_ITER+1):
     layerEmbedding.__setattr__("trainable", False)
 
     # Compute performance
-    measurements[iteration-1, :] = calcPerformance(iteration)
+    measurements[iteration, :] = calcPerformance(iteration)
 
     ###
     # Select 10 samples from the validation set at random so we can visualize errors
@@ -307,11 +307,11 @@ strmatrix = "results-" + currentdata + ".txt"
 np.savetxt(strmatrix, measurements)
 
 # Plot results
-plt.plot(range(1, N_ITER), measurements[:, 0], label="Goals")  # Goals
-plt.plot(range(1, N_ITER), measurements[:, 1], label="Subs")  # Substitutions
-plt.plot(range(1, N_ITER), measurements[:, 2], label="Ins")  # Insertions
-plt.plot(range(1, N_ITER), measurements[:, 3], label="Borr")  # Borrades
-plt.axis([1, N_ITER-1, 0, 100])
+plt.plot(range(1, N_ITER+1), measurements[:, 0], label="Goals")  # Goals
+plt.plot(range(1, N_ITER+1), measurements[:, 1], label="Subs")  # Substitutions
+plt.plot(range(1, N_ITER+1), measurements[:, 2], label="Ins")  # Insertions
+plt.plot(range(1, N_ITER+1), measurements[:, 3], label="Borr")  # Borrades
+plt.axis([1, N_ITER, 0, 100])
 plt.ylabel("%")
 plt.legend()
 plt.xlabel("Number of epochs")
