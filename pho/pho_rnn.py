@@ -18,10 +18,11 @@ from keras.models import Sequential
 from keras.layers import Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding, Reshape
 import numpy as np
 from six.moves import range
+import subprocess
 import matplotlib
-matplotlib.use("Pdf")
+from time import gmtime, strftime
+matplotlib.use("pdf")
 import matplotlib.pyplot as plt
-import pickle
 
 def levenshtein(s, t):
     """
@@ -103,6 +104,37 @@ class CharacterTable(object):
             X = X.argmax(axis=-1)
         return ch.join(self.chars[x] for x in X)
 
+
+def calcPerformance(iteration):
+    # dummy quotes
+    dqote = '"'
+    sqote = "'"
+
+    namefile = "rnn_" + str(iteration) + ".pred"
+    cmdTasas = "./tasas " + namefile + " -F -f " + sqote + "|" + sqote + " -s " + dqote + " " + dqote + " -pra"
+
+    output = subprocess.Popen([cmdTasas], shell=True, stdout=subprocess.PIPE).communicate()[0]
+    subprocess.Popen(["rm " + namefile], shell=True, stdout=subprocess.PIPE).communicate()[0]
+    output = output.splitlines()[1]
+    output = output.split()
+
+    goles = output[1]
+    goles = goles[:-1]
+    subs = output[3]
+    subs = subs[:-1]
+    ins = output[5]
+    ins = ins[:-1]
+    borr = output[7]
+    borr = borr[:-1]
+
+    Scores = np.zeros(4)
+    Scores[0] = float(goles)
+    Scores[1] = float(subs)
+    Scores[2] = float(ins)
+    Scores[3] = float(borr)
+
+    return Scores
+
 class colors:
     ok = '\033[92m'
     fail = '\033[91m'
@@ -122,6 +154,9 @@ BATCH_SIZE = 128
 LAYERS = 1
 INVERT = True
 
+DB_SPLIT = 0.1
+N_ITER = 3
+
 train = Dictionary(TRAIN)
 test = Dictionary(TEST)
 
@@ -131,16 +166,27 @@ words_maxlen = max(map(len, words))
 trans_maxlen = max(map(len, trans))
 print('Maxlen: ',format(trans_maxlen))
 
+# Son totes les lletres que es fan servir (set no accepta duplicats)
 chars = sorted(set([char for word in words for char in word]))
+# Son tots els phonemes que es poden fer servir
 phones = sorted(set([phone for tran in trans for phone in tran]))
-ctable = CharacterTable(chars, words_maxlen)
-ptable = CharacterTable(phones, trans_maxlen)
+
+
+ctable = CharacterTable(chars, words_maxlen)    # ctable = {'': 0, "'": 1, '-': 2, '.' : 3}
+ptable = CharacterTable(phones, trans_maxlen)   # El mateix pero amb fonemes
 
 print('Total training words:', len(words))
 
 print('Vectorization...')
 
+# X_train[1,:] vector on cada entrada es l'index de la lletra (pero esta girat)
+# Y_train[1,:] vector on cada entrada es l'index del phonema
 X_train, y_train = vectorization(words, trans)
+
+# Use less data
+new_dbl = int(len(X_train[:,1])*DB_SPLIT)
+X_train = X_train[1:new_dbl, :]
+y_train = y_train[1:new_dbl, :]
 
 words_test = map(str.split, test.keys())
 trans_test = map(str.split, test.values())
@@ -193,17 +239,25 @@ model.compile(loss='sparse_categorical_crossentropy',
 
 # ----------------------------- TRAINING AND TESTING ------------------------------------- #
 
+
+measaruments = np.zeros((N_ITER-1, 4))
 # Train the model each generation and show predictions against the validation dataset
-for iteration in range(1, 2):
+for iteration in range(1, N_ITER):
     print()
     print('-' * 50)
     print('Iteration', iteration)
     model.fit(X_train, y_train[..., np.newaxis], batch_size=BATCH_SIZE, nb_epoch=1,
               validation_data=(X_val, y_val[..., np.newaxis])) # add a new dim to y_train and y_val to match output
     preds = model.predict_classes(X_val, verbose=0)
+
+    print('Saving results...')
     save(y_val, preds, 'rnn_{}.pred'.format(iteration))
     # Per a evitar que els weights s'actualitzin hem de freeze la layer, si creiem que ja son prou bons
     layerEmbedding.__setattr__("trainable", False)
+
+    # Compute performance
+    measaruments[iteration-1, :] = calcPerformance(iteration)
+
     ###
     # Select 10 samples from the validation set at random so we can visualize errors
     for i in range(10):
@@ -215,7 +269,7 @@ for iteration in range(1, 2):
         guess = ptable.decode(pred, ch=' ').strip()
         print('W:', q[::-1] if INVERT else q)
         print('T:', correct)
-        print(colors.ok + '☑' + colors.close if correct == guess else colors.fail + '☒' + colors.close, 
+        print(colors.ok + '☑' + colors.close if correct == guess else colors.fail + '☒' + colors.close,
               guess, '(' + str(levenshtein(correct.split(), guess.split())) + ')')
         print('---')
 
@@ -226,3 +280,23 @@ np.save('weigths_RNN1.npy', layerRNN1.get_weights())
 
 # Create and save plots
 
+
+
+currentdata = strftime("%Y-%m-%d--%H:%M:%S", gmtime())
+# Save results
+strmatrix = "results-" + currentdata + ".txt"
+np.savetxt(strmatrix, measaruments)
+
+
+# Plot results
+plt.plot(range(1, N_ITER), measaruments[:, 0], label="Goals")  # Goals
+plt.plot(range(1, N_ITER), measaruments[:, 1], label="Subs")  # Substitutions
+plt.plot(range(1, N_ITER), measaruments[:, 2], label="Ins")  # Insertions
+plt.plot(range(1, N_ITER), measaruments[:, 3], label="Borr")  # Borrades
+plt.axis([1, N_ITER-1, 0, 100])
+plt.ylabel("%")
+plt.legend()
+plt.xlabel("number of epochs")
+
+strplot = "plot-" + currentdata + ".png"
+plt.savefig(strplot)
