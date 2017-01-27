@@ -258,7 +258,7 @@ strmatrix = "results-" + currentdata + ".txt"
 np.savetxt(strmatrix, measaruments)
 
 
-#Plot results
+# Plot results
 plt.plot(range(1, N_ITER), measaruments[:, 0], label="Goals")  # Goals
 plt.plot(range(1, N_ITER), measaruments[:, 1], label="Subs")  # Substitutions
 plt.plot(range(1, N_ITER), measaruments[:, 2], label="Ins")  # Insertions
