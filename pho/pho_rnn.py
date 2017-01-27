@@ -18,6 +18,10 @@ from keras.models import Sequential
 from keras.layers import Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding, Reshape
 import numpy as np
 from six.moves import range
+import matplotlib
+matplotlib.use("Pdf")
+import matplotlib.pyplot as plt
+import pickle
 
 def levenshtein(s, t):
     """
@@ -54,6 +58,23 @@ def levenshtein(s, t):
 
     return dist[row, col]
 
+def vectorization(words, trans):
+    X = np.zeros((len(words), words_maxlen), dtype='int32')
+    y = np.zeros((len(trans), trans_maxlen), dtype='int32')
+    for i, word in enumerate(words):
+        X[i,:] = ctable.encode(word)
+    for i, tran in enumerate(trans):
+        y[i,:] = ptable.encode(tran)
+    if INVERT:
+        X = X[:,::-1]
+    return X, y
+
+def save(refs, preds, filename):
+    with open(filename, 'wt') as res:
+        for ref, pred in zip(refs, preds):
+            correct = ptable.decode(ref, ch=' ').strip()
+            guess = ptable.decode(pred, calc_argmax=False, ch=' ').strip()
+            print(correct, '|', guess, file=res)
 
 class Dictionary(dict):
     def __init__(self, filename):
@@ -62,7 +83,6 @@ class Dictionary(dict):
                 word, phones = line.split('\t')[:2]
                 self.update({word: phones})
         super(Dictionary, self).__init__()
-
 
 class CharacterTable(object):
     def __init__(self, chars, maxlen):
@@ -83,17 +103,16 @@ class CharacterTable(object):
             X = X.argmax(axis=-1)
         return ch.join(self.chars[x] for x in X)
 
-
 class colors:
     ok = '\033[92m'
     fail = '\033[91m'
     close = '\033[0m'
 
+# ------------------------- VARIABLES DEFINITION AND INITIALIZATION ------------------------- #
+
 # Parameters for the model and dataset
 TRAIN='wcmudict.train.dict'
 TEST='wcmudict.test.dict'
-
-#canvi de prova
 
 # Try replacing GRU, or SimpleRNN
 RNN = recurrent.LSTM
@@ -110,6 +129,7 @@ words = map(str.split, train.keys())    # [['u', 's', 'e', 'd'], ['m', 'o', 'u',
 trans = map(str.split, train.values())
 words_maxlen = max(map(len, words))
 trans_maxlen = max(map(len, trans))
+print('Maxlen: ',format(trans_maxlen))
 
 chars = sorted(set([char for word in words for char in word]))
 phones = sorted(set([phone for tran in trans for phone in tran]))
@@ -119,16 +139,6 @@ ptable = CharacterTable(phones, trans_maxlen)
 print('Total training words:', len(words))
 
 print('Vectorization...')
-def vectorization(words, trans):
-    X = np.zeros((len(words), words_maxlen), dtype='int32')
-    y = np.zeros((len(trans), trans_maxlen), dtype='int32')
-    for i, word in enumerate(words):
-        X[i,:] = ctable.encode(word)
-    for i, tran in enumerate(trans):
-        y[i,:] = ptable.encode(tran)
-    if INVERT:
-        X = X[:,::-1]
-    return X, y
 
 X_train, y_train = vectorization(words, trans)
 
@@ -145,19 +155,34 @@ y_train = y_train[indices]
 print(X_train.shape)
 print(y_train.shape)
 
+# ------------------------------- MODEL DEFINITION -------------------------------- #
 print('Build model...')
 model = Sequential()
+
+# Embedding of the characters to an VSIZE vector
+layerEmbedding = Embedding(ctable.size, VSIZE, input_dtype='int32')
+# If we want to set previous weights
+# layerEmbedding.set_weights(np.load('weigths_Embedding.npy'))
+model.add(layerEmbedding)
 # "Encode" the input sequence using an RNN, producing an output of HIDDEN_SIZE
-model.add(Embedding(ctable.size, VSIZE, input_dtype='int32'))
-model.add(RNN(HIDDEN_SIZE))
+layerRNN1 = RNN(HIDDEN_SIZE)
+model.add(layerRNN1)
 # For the decoder's input, we repeat the encoded input for each time step
 model.add(RepeatVector(trans_maxlen))
 # The decoder RNN could be multiple layers stacked or a single layer
-for _ in range(LAYERS):
-    model.add(RNN(HIDDEN_SIZE, return_sequences=True))
+# layerRNN2 = {}
+# for i in range(LAYERS):
+layerRNN2 = RNN(HIDDEN_SIZE, return_sequences=True)
+model.add(layerRNN2)
+
+weigths = layerRNN2.get_weights()
+print(format(weigths))
+# np.save('Weights\weigths_RNN2.npy', weigths)
 
 # For each of step of the output sequence, decide which phone should be chosen
-model.add(TimeDistributed(Dense(ptable.size)))
+layerDense = TimeDistributed(Dense(ptable.size))
+model.add(layerDense)
+
 model.add(Activation('softmax'))
 model.summary()
 plot(model, show_shapes=True, to_file='pho_rnn.png', show_layer_names=False)
@@ -166,15 +191,10 @@ model.compile(loss='sparse_categorical_crossentropy',
               optimizer='adam',
               metrics=['accuracy'])
 
-def save(refs, preds, filename):
-    with open(filename, 'wt') as res:
-        for ref, pred in zip(refs, preds):
-            correct = ptable.decode(ref, ch=' ').strip()
-            guess = ptable.decode(pred, calc_argmax=False, ch=' ').strip()
-            print(correct, '|', guess, file=res)
+# ----------------------------- TRAINING AND TESTING ------------------------------------- #
 
 # Train the model each generation and show predictions against the validation dataset
-for iteration in range(1, 120):
+for iteration in range(1, 2):
     print()
     print('-' * 50)
     print('Iteration', iteration)
@@ -182,7 +202,8 @@ for iteration in range(1, 120):
               validation_data=(X_val, y_val[..., np.newaxis])) # add a new dim to y_train and y_val to match output
     preds = model.predict_classes(X_val, verbose=0)
     save(y_val, preds, 'rnn_{}.pred'.format(iteration))
-
+    # Per a evitar que els weights s'actualitzin hem de freeze la layer, si creiem que ja son prou bons
+    layerEmbedding.__setattr__("trainable", False)
     ###
     # Select 10 samples from the validation set at random so we can visualize errors
     for i in range(10):
@@ -197,3 +218,11 @@ for iteration in range(1, 120):
         print(colors.ok + '☑' + colors.close if correct == guess else colors.fail + '☒' + colors.close, 
               guess, '(' + str(levenshtein(correct.split(), guess.split())) + ')')
         print('---')
+
+# --------------------------------- SAVE FINAL RESULTS ----------------------------------- #
+# Save weights
+np.save('weigths_Embedding.npy', layerEmbedding.get_weights())
+np.save('weigths_RNN1.npy', layerRNN1.get_weights())
+
+# Create and save plots
+
