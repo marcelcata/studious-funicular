@@ -15,14 +15,10 @@ Theoretically it introduces shorter term dependencies between source and target.
 from __future__ import print_function
 from keras.utils.visualize_util import plot
 from keras.models import Sequential
-from keras.layers import Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding, Reshape, Convolution1D, MaxPooling1D, Dropout, Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding, Reshape
+from keras.layers import Convolution1D, MaxPooling1D, Dropout, Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding, Reshape
 import numpy as np
 from six.moves import range
 import subprocess
-import matplotlib
-from time import gmtime, strftime
-matplotlib.use("pdf")
-import matplotlib.pyplot as plt
 
 def levenshtein(s, t):
     """
@@ -59,23 +55,6 @@ def levenshtein(s, t):
 
     return dist[row, col]
 
-def vectorization(words, trans):
-    X = np.zeros((len(words), words_maxlen), dtype='int32')
-    y = np.zeros((len(trans), trans_maxlen), dtype='int32')
-    for i, word in enumerate(words):
-        X[i,:] = ctable.encode(word)
-    for i, tran in enumerate(trans):
-        y[i,:] = ptable.encode(tran)
-    if INVERT:
-        X = X[:,::-1]
-    return X, y
-
-def save(refs, preds, filename):
-    with open(filename, 'wt') as res:
-        for ref, pred in zip(refs, preds):
-            correct = ptable.decode(ref, ch=' ').strip()
-            guess = ptable.decode(pred, calc_argmax=False, ch=' ').strip()
-            print(correct, '|', guess, file=res)
 
 class Dictionary(dict):
     def __init__(self, filename):
@@ -84,6 +63,7 @@ class Dictionary(dict):
                 word, phones = line.split('\t')[:2]
                 self.update({word: phones})
         super(Dictionary, self).__init__()
+
 
 class CharacterTable(object):
     def __init__(self, chars, maxlen):
@@ -104,6 +84,7 @@ class CharacterTable(object):
             X = X.argmax(axis=-1)
         return ch.join(self.chars[x] for x in X)
 
+
 def calcPerformance(iteration):
     # dummy quotes
     dqote = '"'
@@ -113,7 +94,7 @@ def calcPerformance(iteration):
     cmdTasas = "./tasas " + namefile + " -F -f " + sqote + "|" + sqote + " -s " + dqote + " " + dqote + " -pra"
 
     output = subprocess.Popen([cmdTasas], shell=True, stdout=subprocess.PIPE).communicate()[0]
-    #subprocess.Popen(["rm " + namefile], shell=True, stdout=subprocess.PIPE).communicate()[0]
+    subprocess.Popen(["rm " + namefile], shell=True, stdout=subprocess.PIPE).communicate()[0]
     output = output.splitlines()[1]
     output = output.split()
 
@@ -139,22 +120,23 @@ class colors:
     fail = '\033[91m'
     close = '\033[0m'
 
-# ------------------------- VARIABLES DEFINITION AND INITIALIZATION ------------------------- #
-
 # Parameters for the model and dataset
 TRAIN='wcmudict.train.dict'
 TEST='wcmudict.test.dict'
 
 # Try replacing GRU, or SimpleRNN
-RNN = recurrent.LSTM
-VSIZE = 7 # Embedded vector size
-HIDDEN_SIZE = 128  # Size of hidden layer after first RNN
-BATCH_SIZE = 128
-LAYERS = 1 # Layers of the second RNN
-INVERT = True # Invert the word
 
-DB_SPLIT = 0.1 # Split the database (in % of database split, all database = 1)
-N_ITER = 1 # Number of epochs
+#PROBAR GRU
+
+RNN = recurrent.LSTM
+VSIZE = 7
+HIDDEN_SIZE = 128
+BATCH_SIZE = 128
+LAYERS = 1
+INVERT = True
+
+DB_SPLIT = 0.3
+N_ITER = 25
 
 train = Dictionary(TRAIN)
 test = Dictionary(TEST)
@@ -163,12 +145,12 @@ words = map(str.split, train.keys())    # [['u', 's', 'e', 'd'], ['m', 'o', 'u',
 trans = map(str.split, train.values())
 words_maxlen = max(map(len, words))
 trans_maxlen = max(map(len, trans))
-print('Maxlen: ',format(trans_maxlen))
 
-# These are all the used characters ("set" does not accept duplicates)
+# Son totes les lletres que es fan servir (set no accepta duplicats)
 chars = sorted(set([char for word in words for char in word]))
-# These are all the used phones
+# Son tots els phonemes que es poden fer servir
 phones = sorted(set([phone for tran in trans for phone in tran]))
+
 
 ctable = CharacterTable(chars, words_maxlen)    # ctable = {'': 0, "'": 1, '-': 2, '.' : 3}
 ptable = CharacterTable(phones, trans_maxlen)   # El mateix pero amb fonemes
@@ -176,15 +158,26 @@ ptable = CharacterTable(phones, trans_maxlen)   # El mateix pero amb fonemes
 print('Total training words:', len(words))
 
 print('Vectorization...')
+def vectorization(words, trans):
+    X = np.zeros((len(words), words_maxlen), dtype='int32')
+    y = np.zeros((len(trans), trans_maxlen), dtype='int32')
+    for i, word in enumerate(words):
+        X[i, :] = ctable.encode(word)
+    for i, tran in enumerate(trans):
+        y[i, :] = ptable.encode(tran)
+    if INVERT:
+        X = X[:, ::-1]
+    return X, y
 
 # X_train[1,:] vector on cada entrada es l'index de la lletra (pero esta girat)
 # Y_train[1,:] vector on cada entrada es l'index del phonema
 X_train, y_train = vectorization(words, trans)
 
 # Use less data
-new_dbl = int(len(X_train[:,1])*DB_SPLIT)
-X_train = X_train[1:new_dbl, :]
-y_train = y_train[1:new_dbl, :]
+#new_dbl = int(len(X_train[:,1])*DB_SPLIT)
+#X_train = X_train[1:new_dbl, :]
+#y_train = y_train[1:new_dbl, :]
+
 
 words_test = map(str.split, test.keys())
 trans_test = map(str.split, test.values())
@@ -200,17 +193,10 @@ y_train = y_train[indices]
 print(X_train.shape)
 print(y_train.shape)
 
-# ------------------------------- MODEL DEFINITION -------------------------------- #
 print('Build model...')
 model = Sequential()
-
-# Embedding of the characters to an VSIZE vector
-layerEmbedding = Embedding(ctable.size, VSIZE, input_dtype='int32')
-# If we want to set previous weights
-# layerEmbedding.set_weights(np.load('weigths_Embedding.npy'))
-model.add(layerEmbedding)
-
-
+# "Encode" the input sequence using an RNN, producing an output of HIDDEN_SIZE
+model.add(Embedding(ctable.size, VSIZE, input_dtype='int32'))
 
 #PONER CONVOLOCIONAL 1D PARA REDUCIR EL TAMAÑO
 #NOS DARA UNA MATRIZ MAS PEQUEÑA PARA HACER DIMENSION ENTRE PARAMETRES
@@ -224,30 +210,27 @@ filter_length = 3
 nb_filter = 15
 pool_length = 4
 
-# model.add(Convolution1D(nb_filter=nb_filter,
-#                        filter_length=filter_length,
-#                        border_mode='valid',
-#                        activation='relu',
-#                        subsample_length=1))
+model.add(Convolution1D(nb_filter=nb_filter,
+                        filter_length=filter_length,
+                        border_mode='valid',
+                        activation='relu',
+                        subsample_length=1))
 #model.add(MaxPooling1D(pool_length=pool_length))
 
-
-# "Encode" the input sequence using an RNN, producing an output of HIDDEN_SIZE
-layerRNN1 = RNN(HIDDEN_SIZE)
-model.add(layerRNN1)
+model.add(RNN(HIDDEN_SIZE))
 # For the decoder's input, we repeat the encoded input for each time step
 model.add(RepeatVector(trans_maxlen))
 # The decoder RNN could be multiple layers stacked or a single layer
-# layerRNN2 = {}
-# for i in range(LAYERS):
-layerRNN2 = RNN(HIDDEN_SIZE, return_sequences=True)
-# POSAR AQUI UNA BIDIRECCIONAL model.add(Bidirecional(RNN...
-model.add(layerRNN2)
+
+
+
+#POSAR 2 RNN
+model.add(RNN(HIDDEN_SIZE, return_sequences=True))
+
+#Bidireccional (model.add(RNN(HIDDEN_SIZE, return_sequences=True)))
 
 # For each of step of the output sequence, decide which phone should be chosen
-layerDense = TimeDistributed(Dense(ptable.size))
-model.add(layerDense)
-
+model.add(TimeDistributed(Dense(ptable.size)))
 model.add(Activation('softmax'))
 model.summary()
 plot(model, show_shapes=True, to_file='pho_rnn.png', show_layer_names=False)
@@ -256,12 +239,17 @@ model.compile(loss='sparse_categorical_crossentropy',
               optimizer='adam',
               metrics=['accuracy'])
 
-# ----------------------------- TRAINING AND TESTING ------------------------------------- #
+def save(refs, preds, filename):
+    with open(filename, 'wt') as res:
+        for ref, pred in zip(refs, preds):
+            correct = ptable.decode(ref, ch=' ').strip()
+            guess = ptable.decode(pred, calc_argmax=False, ch=' ').strip()
+            print(correct, '|', guess, file=res)
 
-measurements = np.zeros((N_ITER, 4))
 
+measaruments = np.zeros((N_ITER, 4))
 # Train the model each generation and show predictions against the validation dataset
-for iteration in range(1,N_ITER+1):
+for iteration in range(1, N_ITER):
     print()
     print('-' * 50)
     print('Iteration', iteration)
@@ -271,11 +259,9 @@ for iteration in range(1,N_ITER+1):
 
     print('Saving results...')
     save(y_val, preds, 'rnn_{}.pred'.format(iteration))
-    # Per a evitar que els weights s'actualitzin hem de freeze la layer, si creiem que ja son prou bons
-    layerEmbedding.__setattr__("trainable", False)
 
     # Compute performance
-    measurements[iteration-1, :] = calcPerformance(iteration)
+    measaruments[iteration-1, :] = calcPerformance(iteration)
 
     ###
     # Select 10 samples from the validation set at random so we can visualize errors
@@ -286,35 +272,13 @@ for iteration in range(1,N_ITER+1):
         q = ctable.decode(rowX)
         correct = ptable.decode(rowy, ch=' ').strip()
         guess = ptable.decode(pred, ch=' ').strip()
-        print('W:', q[::-1] if INVERT else q)
-        print('T:', correct)
-        print(colors.ok + '☑' + colors.close if correct == guess else colors.fail + '☒' + colors.close,
-              guess, '(' + str(levenshtein(correct.split(), guess.split())) + ')')
-        print('---')
+#        print('W:', q[::-1] if INVERT else q)
+#        print('T:', correct)
+#        print(colors.ok + '☑' + colors.close if correct == guess else colors.fail + '☒' + colors.close,
+#              guess, '(' + str(levenshtein(correct.split(), guess.split())) + ')')
+#        print('---')
 
-# --------------------------------- SAVE FINAL RESULTS ----------------------------------- #
 
-print("Saving results...")
-# Save weights
-np.save('weigths_Embedding.npy', layerEmbedding.get_weights())
-np.save('weigths_RNN1.npy', layerRNN1.get_weights())
 
-# Create and save plots
-
-currentdata = strftime("%Y-%m-%d--%H:%M:%S", gmtime())
 # Save results
-strmatrix = "results-" + currentdata + ".txt"
-np.savetxt(strmatrix, measurements)
-
-# Plot results
-plt.plot(range(1, N_ITER), measurements[:, 0], label="Goals")  # Goals
-plt.plot(range(1, N_ITER), measurements[:, 1], label="Subs")  # Substitutions
-plt.plot(range(1, N_ITER), measurements[:, 2], label="Ins")  # Insertions
-plt.plot(range(1, N_ITER), measurements[:, 3], label="Borr")  # Borrades
-plt.axis([1, N_ITER-1, 0, 100])
-plt.ylabel("%")
-plt.legend()
-plt.xlabel("Number of epochs")
-
-strplot = "plot-" + currentdata + ".png"
-plt.savefig(strplot)
+np.savetxt('measurements.txt', measaruments)
