@@ -19,7 +19,10 @@ from keras.layers import Activation, TimeDistributed, Dense, RepeatVector, recur
 import numpy as np
 from six.moves import range
 import subprocess
-
+import matplotlib
+from time import gmtime, strftime
+matplotlib.use("pdf")
+import matplotlib.pyplot as plt
 def levenshtein(s, t):
     """
         levenshtein(s, t) -> ldist
@@ -132,8 +135,8 @@ BATCH_SIZE = 128
 LAYERS = 1
 INVERT = True
 
-DB_SPLIT = 0.3
-N_ITER = 25
+DB_SPLIT = 0.1
+N_ITER = 3
 
 train = Dictionary(TRAIN)
 test = Dictionary(TEST)
@@ -217,7 +220,7 @@ def save(refs, preds, filename):
             print(correct, '|', guess, file=res)
 
 
-measaruments = np.zeros((N_ITER, 4))
+measaruments = np.zeros((N_ITER-1, 4))
 # Train the model each generation and show predictions against the validation dataset
 for iteration in range(1, N_ITER):
     print()
@@ -249,6 +252,21 @@ for iteration in range(1, N_ITER):
         print('---')
 
 
-
+currentdata = strftime("%Y-%m-%d--%H:%M:%S", gmtime())
 # Save results
-np.savetxt('measurements.txt', measaruments)
+strmatrix = "results-" + currentdata + ".txt"
+np.savetxt(strmatrix, measaruments)
+
+
+#Plot results
+plt.plot(range(1, N_ITER), measaruments[:, 0], label="Goals")  # Goals
+plt.plot(range(1, N_ITER), measaruments[:, 1], label="Subs")  # Substitutions
+plt.plot(range(1, N_ITER), measaruments[:, 2], label="Ins")  # Insertions
+plt.plot(range(1, N_ITER), measaruments[:, 3], label="Borr")  # Borrades
+plt.axis([1, N_ITER-1, 0, 100])
+plt.ylabel("%")
+plt.legend()
+plt.xlabel("number of epochs")
+
+strplot = "plot-" + currentdata + ".png"
+plt.savefig(strplot)
