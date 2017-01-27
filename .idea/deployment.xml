@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="veu_upc">
+  <component name="PublishConfigData" autoUpload="Always" serverName="servidor_gpi">
     <serverData>
-      <paths name="veu_upc">
+      <paths name="servidor_gpi">
         <serverdata>
           <mappings>
             <mapping deploy="/dlsl-didac" local="$PROJECT_DIR$" web="/" />
