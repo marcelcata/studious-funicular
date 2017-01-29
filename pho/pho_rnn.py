@@ -257,7 +257,7 @@ model = Sequential()
 # Embedding of the characters to an VSIZE vector
 layerEmbedding = Embedding(ctable.size, VSIZE, input_dtype='int32')
 # If we want to set previous weights
-# layerEmbedding.set_weights(np.load('weights_Embedding_Bo.npy'))
+# layerEmbedding.set_weights(np.load('weigths_Embedding.npy'))
 model.add(layerEmbedding)
 
 
@@ -296,11 +296,6 @@ model.add(RepeatVector(trans_maxlen))
 # for i in range(LAYERS):
 layerRNN2 = RNN(HIDDEN_SIZE, return_sequences=True)
 model.add(layerRNN2)
-# POSAR AQUI UNA BIDIRECCIONAL model.add(Bidirecional(RNN...
-layerRNN3 = RNN(HIDDEN_SIZE, return_sequences=True)
-model.add(Bidirectional(layerRNN3))
-#layerRNN4 = RNN(HIDDEN_SIZE, return_sequences=True)
-#model.add(Bidirectional(layerRNN4))
 
 # POSAR AQUI UNA BIDIRECCIONAL model.add(Bidirecional(RNN...
 if isBid == "B":
@@ -365,7 +360,7 @@ def saveResults (measurements, N_ITER):
 measurements = np.zeros((N_ITER, 4))
 
 # Train the model each generation and show predictions against the validation dataset
-for iteration in range(N_ITER):
+for iteration in range(0,N_ITER):
     print()
     print('-' * 50)
     print('Iteration', iteration)
@@ -388,8 +383,7 @@ for iteration in range(N_ITER):
 
     ###
     # Select 10 samples from the validation set at random so we can visualize errors
-    for i\
-        in range(10):
+    for i in range(10):
         ind = np.random.randint(0, len(X_val))
         rowX, rowy = X_val[ind], y_val[ind]
         pred = preds[ind]
