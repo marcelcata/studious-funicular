@@ -15,7 +15,7 @@ Theoretically it introduces shorter term dependencies between source and target.
 from __future__ import print_function
 from keras.utils.visualize_util import plot
 from keras.models import Sequential
-from keras.layers import Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding, Reshape, Convolution1D, MaxPooling1D, Dropout, Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding, Reshape
+from keras.layers import Activation, TimeDistributed, Dense, Bidirectional, recurrent, Embedding, Reshape, Convolution1D, MaxPooling1D, Dropout, Activation, TimeDistributed, Dense, RepeatVector, recurrent, Embedding, Reshape
 import numpy as np
 from six.moves import range
 import subprocess
@@ -23,6 +23,7 @@ import matplotlib
 from time import gmtime, strftime
 matplotlib.use("pdf")
 import matplotlib.pyplot as plt
+import os
 
 def levenshtein(s, t):
     """
@@ -156,13 +157,20 @@ dirname = dirname + "__" + currentdata
 cmdmkdir = "mkdir " + dirname
 subprocess.Popen([cmdmkdir], shell=True, stdout=subprocess.PIPE).communicate()[0]
 
+currentdir = os.getcwd()
+dirname = currentdir + "/" + dirname
+txtprint = open(dirname + "/Description.txt", 'w')
+
+
 # Parameters for the model and dataset
 if isAligned == 'A':
     TRAIN='wcmudict.train.aligned'
     TEST='wcmudict.test.aligned'
+    txtprint.write("Aligned database" + os.linesep)
 else:
     TRAIN='wcmudict.train.dict'
     TEST='wcmudict.test.dict'
+    txtprint.write("Not aligned database" + os.linesep)
 
 # Try replacing GRU, or SimpleRNN
 RNN = recurrent.LSTM
@@ -262,29 +270,48 @@ model.add(layerEmbedding)
 
 
 # Convolution
-filter_length = 3
-nb_filter = 15
-pool_length = 4
+if isConvolutional == "C":
+    filter_length = int(raw_input("Filter length: "))
+    nb_filter = int(raw_input("Nb filter: "))
+    pool_length = int(raw_input("Pool length: "))
 
-# model.add(Convolution1D(nb_filter=nb_filter,
-#                        filter_length=filter_length,
-#                        border_mode='valid',
-#                        activation='relu',
-#                        subsample_length=1))
-#model.add(MaxPooling1D(pool_length=pool_length))
+    model.add(Convolution1D(nb_filter=nb_filter, filter_length=filter_length,border_mode='valid',activation='relu', subsample_length=1))
+    model.add(MaxPooling1D(pool_length=pool_length))
+
+    txtprint.write("Convolutional:\t Filtre length = " + str(filter_length) + " Nb filter = " + str(nb_filter) + " Pool length = " + str(pool_length) + os.linesep)
+else:
+    txtprint.write("NO convolutional" + os.linesep)
+
 
 
 # "Encode" the input sequence using an RNN, producing an output of HIDDEN_SIZE
 layerRNN1 = RNN(HIDDEN_SIZE)
 model.add(layerRNN1)
+
 # For the decoder's input, we repeat the encoded input for each time step
 model.add(RepeatVector(trans_maxlen))
+
 # The decoder RNN could be multiple layers stacked or a single layer
 # layerRNN2 = {}
 # for i in range(LAYERS):
 layerRNN2 = RNN(HIDDEN_SIZE, return_sequences=True)
-# POSAR AQUI UNA BIDIRECCIONAL model.add(Bidirecional(RNN...
 model.add(layerRNN2)
+
+# POSAR AQUI UNA BIDIRECCIONAL model.add(Bidirecional(RNN...
+if isBid == "B":
+    layerRNN3 = RNN(HIDDEN_SIZE, return_sequences=True)
+    model.add(Bidirectional(layerRNN3))
+    txtprint.write("Bidirectional layer" + os.linesep)
+else:
+    txtprint.write("No bidirectional layer" + os.linesep)
+
+txtprint.write("Number of neurons: " + str(HIDDEN_SIZE) + os.linesep)
+txtprint.write("Portion of db used: " + str(DB_SPLIT) + os.linesep)
+txtprint.close()
+
+# FAILED EXPERIMENT
+#layerRNN4 = RNN(HIDDEN_SIZE, return_sequences=True)
+#model.add(Bidirectional(layerRNN4))
 
 # For each of step of the output sequence, decide which phone should be chosen
 layerDense = TimeDistributed(Dense(ptable.size))
@@ -299,17 +326,18 @@ model.compile(loss='sparse_categorical_crossentropy',
               metrics=['accuracy'])
 
 
+
+
 def saveResults (measurements, N_ITER):
     print("Saving results...")
     # Save weights
-    np.save([dirname + "/" + "weigths_Embedding.npy"], layerEmbedding.get_weights())
+    np.save(dirname + "/" + "weigths_Embedding.npy", layerEmbedding.get_weights())
     np.save(dirname + "/" + "weigths_RNN1.npy", layerRNN1.get_weights())
 
     # Create and save plots
 
-    currentdata = strftime("%H-%M-%S", gmtime())
     # Save results
-    strmatrix = dirname + "/" + "res-" + currentdata + ".txt"
+    strmatrix = dirname + "/" + "results.txt"
     np.savetxt(strmatrix, measurements)
 
     # Plot results
@@ -322,7 +350,7 @@ def saveResults (measurements, N_ITER):
     plt.legend(bbox_to_anchor=(0.25, 1))
     plt.xlabel("Number of epochs")
 
-    strplot = dirname + "/" + "plot-" + currentdata + ".png"
+    strplot = dirname + "/" + "plot.png"
     plt.savefig(strplot)
     plt.clf()
 
