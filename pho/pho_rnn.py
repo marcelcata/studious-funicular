@@ -23,6 +23,7 @@ import matplotlib
 from time import gmtime, strftime
 matplotlib.use("pdf")
 import matplotlib.pyplot as plt
+import os
 
 def levenshtein(s, t):
     """
@@ -140,39 +141,90 @@ class colors:
     close = '\033[0m'
 
 # ------------------------- VARIABLES DEFINITION AND INITIALIZATION ------------------------- #
+print("\n\n")
+print("------------------------- Configuration -------------------------")
+
+# Configuration
+isAligned = raw_input("NOT Aligned (NA), Aligned (A): ")
+isConvolutional = raw_input("NOT Conv (NC), Conv (C): ")
+isBid = raw_input("NOT Bidirectional (NB), Bidirectional (B): ")
+nNeurons = int(raw_input("Number of neurons: "))
+
+# Directory to store results
+currentdata = strftime("%d_%H-%M-%S", gmtime())
+dirname = isAligned + "_" + isConvolutional + "_" + isBid + "_N-" + str(nNeurons)
+dirname = dirname + "__" + currentdata
+cmdmkdir = "mkdir " + dirname
+subprocess.Popen([cmdmkdir], shell=True, stdout=subprocess.PIPE).communicate()[0]
+
+currentdir = os.getcwd()
+dirname = currentdir + "/" + dirname
+txtprint = open(dirname + "/Description.txt", 'w')
+
 
 # Parameters for the model and dataset
-TRAIN='wcmudict.train.dict'
-TEST='wcmudict.test.dict'
+if isAligned == 'A':
+    TRAIN='wcmudict.train.aligned'
+    TEST='wcmudict.test.aligned'
+    txtprint.write("Aligned database" + os.linesep)
+else:
+    TRAIN='wcmudict.train.dict'
+    TEST='wcmudict.test.dict'
+    txtprint.write("Not aligned database" + os.linesep)
 
 # Try replacing GRU, or SimpleRNN
 RNN = recurrent.LSTM
 VSIZE = 7   # Embedded vector size
-HIDDEN_SIZE = 150 # Size of hidden layer after first RNN
+HIDDEN_SIZE = nNeurons   # Size of hidden layer after first RNN
 BATCH_SIZE = 128
 LAYERS = 1  # Layers of the second RNN
 INVERT = True   # Invert the word
 
-DB_SPLIT = 1 # Split the database (in % of database split, all database = 1)
-N_ITER = 100 # Number of epochs
+# Split the database (in % of database split, all database = 1)
+DB_SPLIT = float(raw_input("Portion of the db that you want to use (all database = 1): "))
+N_ITER = int(raw_input("Number of epochs: "))  # Number of epochs
 
 train = Dictionary(TRAIN)
 test = Dictionary(TEST)
 
 words = map(str.split, train.keys())    # [['u', 's', 'e', 'd'], ['m', 'o', 'u', 'n', 't'], ...]
 trans = map(str.split, train.values())
+words_test = map(str.split, test.keys())
+trans_test = map(str.split, test.values())
+
 words_maxlen = max(map(len, words))
 trans_maxlen = max(map(len, trans))
+words_t_maxlen = max(map(len, words_test))
+trans_t_maxlen = max(map(len, trans_test))
+
+words_maxlen = max([words_maxlen, words_t_maxlen])
+trans_maxlen = max([trans_maxlen, trans_t_maxlen])
+
 print('Maxlen: ',format(trans_maxlen))
 
 # These are all the used characters ("set" does not accept duplicates)
 chars = sorted(set([char for word in words for char in word]))
-# These are all the used phones
-phones = sorted(set([phone for tran in trans for phone in tran]))
+
+# These are all the used phones (in the aligned db, not all the phonemes are present in the train db)
+phones = set()
+for xx, tran in enumerate(trans):
+    for jj, c in enumerate(tran):
+        phones.add(c)
+
+print("Size train pho: " + str(len(phones)))
+for xx, tran_t in enumerate(trans_test):
+    for jj, c in enumerate(tran_t):
+        phones.add(c)
+
+print("Size full pho: " + str(len(phones)))
+phones = sorted(phones)
+
 
 ctable = CharacterTable(chars, words_maxlen)    # ctable = {'': 0, "'": 1, '-': 2, '.' : 3}
 ptable = CharacterTable(phones, trans_maxlen)   # El mateix pero amb fonemes
 
+
+print("\n\n")
 print('Total training words:', len(words))
 
 print('Vectorization...')
@@ -186,8 +238,6 @@ new_dbl = int(len(X_train[:,1])*DB_SPLIT)
 X_train = X_train[1:new_dbl, :]
 y_train = y_train[1:new_dbl, :]
 
-words_test = map(str.split, test.keys())
-trans_test = map(str.split, test.values())
 X_val, y_val = vectorization(words_test, trans_test)
 
 # Shuffle (X_train, y_train) in unison
@@ -220,19 +270,27 @@ model.add(layerEmbedding)
 
 
 # Convolution
-filter_length = 3
-nb_filter = 15
-pool_length = 4
+if isConvolutional == "C":
+    filter_length = int(raw_input("Filter length: "))
+    nb_filter = int(raw_input("Nb filter: "))
+    pool_length = int(raw_input("Pool length: "))
 
-#model.add(Convolution1D(nb_filter=nb_filter, filter_length=filter_length,border_mode='valid',activation='relu', subsample_length=1))
-#model.add(MaxPooling1D(pool_length=pool_length))
+    model.add(Convolution1D(nb_filter=nb_filter, filter_length=filter_length,border_mode='valid',activation='relu', subsample_length=1))
+    model.add(MaxPooling1D(pool_length=pool_length))
+
+    txtprint.write("Convolutional:\t Filtre length = " + str(filter_length) + " Nb filter = " + str(nb_filter) + " Pool length = " + str(pool_length) + os.linesep)
+else:
+    txtprint.write("NO convolutional" + os.linesep)
+
 
 
 # "Encode" the input sequence using an RNN, producing an output of HIDDEN_SIZE
 layerRNN1 = RNN(HIDDEN_SIZE)
 model.add(layerRNN1)
+
 # For the decoder's input, we repeat the encoded input for each time step
 model.add(RepeatVector(trans_maxlen))
+
 # The decoder RNN could be multiple layers stacked or a single layer
 # layerRNN2 = {}
 # for i in range(LAYERS):
@@ -241,6 +299,22 @@ model.add(layerRNN2)
 # POSAR AQUI UNA BIDIRECCIONAL model.add(Bidirecional(RNN...
 layerRNN3 = RNN(HIDDEN_SIZE, return_sequences=True)
 model.add(Bidirectional(layerRNN3))
+#layerRNN4 = RNN(HIDDEN_SIZE, return_sequences=True)
+#model.add(Bidirectional(layerRNN4))
+
+# POSAR AQUI UNA BIDIRECCIONAL model.add(Bidirecional(RNN...
+if isBid == "B":
+    layerRNN3 = RNN(HIDDEN_SIZE, return_sequences=True)
+    model.add(Bidirectional(layerRNN3))
+    txtprint.write("Bidirectional layer" + os.linesep)
+else:
+    txtprint.write("No bidirectional layer" + os.linesep)
+
+txtprint.write("Number of neurons: " + str(HIDDEN_SIZE) + os.linesep)
+txtprint.write("Portion of db used: " + str(DB_SPLIT) + os.linesep)
+txtprint.close()
+
+# FAILED EXPERIMENT
 #layerRNN4 = RNN(HIDDEN_SIZE, return_sequences=True)
 #model.add(Bidirectional(layerRNN4))
 
@@ -255,6 +329,36 @@ plot(model, show_shapes=True, to_file='pho_rnn.png', show_layer_names=False)
 model.compile(loss='sparse_categorical_crossentropy',
               optimizer='adam',
               metrics=['accuracy'])
+
+
+
+
+def saveResults (measurements, N_ITER):
+    print("Saving results...")
+    # Save weights
+    np.save(dirname + "/" + "weigths_Embedding.npy", layerEmbedding.get_weights())
+    np.save(dirname + "/" + "weigths_RNN1.npy", layerRNN1.get_weights())
+
+    # Create and save plots
+
+    # Save results
+    strmatrix = dirname + "/" + "results.txt"
+    np.savetxt(strmatrix, measurements)
+
+    # Plot results
+    plt.plot(range(1, N_ITER + 1), measurements[:, 0], label="Goals")  # Goals
+    plt.plot(range(1, N_ITER + 1), measurements[:, 1], label="Subs")  # Substitutions
+    plt.plot(range(1, N_ITER + 1), measurements[:, 2], label="Ins")  # Insertions
+    plt.plot(range(1, N_ITER + 1), measurements[:, 3], label="Borr")  # Borrades
+    plt.axis([1, N_ITER, 0, 100])
+    plt.ylabel("%")
+    plt.legend(bbox_to_anchor=(0.25, 1))
+    plt.xlabel("Number of epochs")
+
+    strplot = dirname + "/" + "plot.png"
+    plt.savefig(strplot)
+    plt.clf()
+
 
 # ----------------------------- TRAINING AND TESTING ------------------------------------- #
 
@@ -276,6 +380,11 @@ for iteration in range(N_ITER):
 
     # Compute performance
     measurements[iteration, :] = calcPerformance(iteration)
+    print(measurements[iteration, :])
+
+    if iteration % 5 == 0:
+        # Save just in case forced stop
+        saveResults(measurements, N_ITER)
 
     ###
     # Select 10 samples from the validation set at random so we can visualize errors
@@ -294,28 +403,4 @@ for iteration in range(N_ITER):
         print('---')
 
 # --------------------------------- SAVE FINAL RESULTS ----------------------------------- #
-
-print("Saving results...")
-# Save weights
-np.save('weights_Embedding.npy', layerEmbedding.get_weights())
-np.save('weights_RNN1.npy', layerRNN1.get_weights())
-
-# Create and save plots
-
-currentdata = strftime("%Y-%m-%d--%H-%M-%S", gmtime())
-# Save result
-strmatrix = "results-" + currentdata + ".txt"
-np.savetxt(strmatrix, measurements)
-
-# Plot results
-plt.plot(range(1, N_ITER+1), measurements[:, 0], label="Goals")  # Goals
-plt.plot(range(1, N_ITER+1), measurements[:, 1], label="Subs")  # Substitutions
-plt.plot(range(1, N_ITER+1), measurements[:, 2], label="Ins")  # Insertions
-plt.plot(range(1, N_ITER+1), measurements[:, 3], label="Borr")  # Borrades
-plt.axis([1, N_ITER, 0, 100])
-plt.ylabel("%")
-plt.legend()
-plt.xlabel("Number of epochs")
-
-strplot = "plot-" + currentdata + ".png"
-plt.savefig(strplot)
+saveResults(measurements, N_ITER)

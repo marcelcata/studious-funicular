@@ -1,0 +1,5 @@
+NO aligned database
+NO convolutional
+NO bidirectional
+Number of neurons: 128
+Portion of db: 1
