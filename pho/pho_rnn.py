@@ -105,6 +105,19 @@ class CharacterTable(object):
             X = X.argmax(axis=-1)
         return ch.join(self.chars[x] for x in X)
 
+def AUC(y_true,y_pred):
+    not_y_pred=np.logical_not(y_pred)
+    y_int1=y_true*y_pred
+    y_int0=np.logical_not(y_true)*not_y_pred
+    TP=np.sum(y_pred*y_int1)
+    FP=np.sum(y_pred)-TP
+    TN=np.sum(not_y_pred*y_int0)
+    FN=np.sum(not_y_pred)-TN
+    TPR=np.float(TP)/(TP+FN)
+    FPR=np.float(FP)/(FP+TN)
+    return((1+TPR-FPR)/2)
+
+
 def calcPerformance(iteration):
     # dummy quotes
     dqote = '"'
@@ -260,8 +273,6 @@ layerEmbedding = Embedding(ctable.size, VSIZE, input_dtype='int32')
 # layerEmbedding.set_weights(np.load('weigths_Embedding.npy'))
 model.add(layerEmbedding)
 
-
-
 #PONER CONVOLOCIONAL 1D PARA REDUCIR EL TAMAÑO
 #NOS DARA UNA MATRIZ MAS PEQUEÑA PARA HACER DIMENSION ENTRE PARAMETRES
 
@@ -281,8 +292,6 @@ if isConvolutional == "C":
     txtprint.write("Convolutional:\t Filtre length = " + str(filter_length) + " Nb filter = " + str(nb_filter) + " Pool length = " + str(pool_length) + os.linesep)
 else:
     txtprint.write("NO convolutional" + os.linesep)
-
-
 
 # "Encode" the input sequence using an RNN, producing an output of HIDDEN_SIZE
 layerRNN1 = RNN(HIDDEN_SIZE)
