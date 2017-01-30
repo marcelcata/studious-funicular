@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="fe04bcd9-acb7-41fa-901c-a0b8cdff0965" name="servidor_gpi" url="http://147.83.50.59">
+        <fileTransfer host="147.83.50.59" port="6969" rootFolder="/veu4/usuaris32/dlsl1" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="6969" />
+        </fileTransfer>
+      </webServer>
+      <webServer id="cc8dfcf0-86d1-47c3-b9b2-a297311f3207" name="Servidor_Amazon" url="http://ec2-52-27-199-40.us-west-2.compute.amazonaws.com">
+        <fileTransfer host="ec2-52-27-199-40.us-west-2.compute.amazonaws.com" port="22" privateKey="C:\Users\marti\Downloads\keyoregon.ppk" accessType="SFTP" keyPair="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
