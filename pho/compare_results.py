@@ -2,7 +2,7 @@
 # IMPORTANT: They have to be trained with the same database percentage to be a fair comparison
 
 # In the command line it has to be used as (example):
-# python compare_results.py results-2017-01-28--03-55-39.txt results-2017-01-28--03-55-39.txt file_name_plot
+# python compare_results.py NA_NC_B_N-128__28_12-03-00/results-2017-01-28--03-55-39.txt results-2017-01-28--03-55-39.txt
 
 import matplotlib
 matplotlib.use("pdf")
